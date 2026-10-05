@@ -116,7 +116,7 @@ if selected_stocks:
 
           # 呼叫相容模型
           response = client.models.generate_content(
-              model="gemini-2.5-flash", contents=prompt
+              model="gemini-3.8-flash", contents=prompt
           )
 
           st.success("✅ 分析報告產生成功！")
