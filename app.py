@@ -12,7 +12,7 @@ st.title("📈 股票清單即時診斷儀表板")
 # 自動刷新：每 10 秒刷新一次頁面 (10000ms)
 count = st_autorefresh(interval=10000, limit=1000, key="stock_refresh")
 
-# 預設觀察清單 (台股上市需加 .TW，上櫃加 .TWO)
+# 預設觀察清單
 DEFAULT_STOCKS = ["2330.TW", "2454.TW", "2317.TW", "0050.TW"]
 
 # 側邊欄設定
@@ -82,31 +82,49 @@ if selected_stocks:
   st.divider()
   st.subheader("🤖 Gemini 股票即時診斷")
 
-  target_stock = st.selectbox(
-      "選擇股票進行 AI 診斷:", selected_stocks
-  )
+  target_stock = st.selectbox("選擇股票進行 AI 診斷:", selected_stocks)
 
   if st.button("🚀 產生 AI 分析報告"):
-    api_key = user_api_key or st.secrets.get("GEMINI_API_KEY")
+    # 優先讀取輸入框，若無則讀取 Secrets
+    api_key = user_api_key.strip() if user_api_key else None
     if not api_key:
-      st.warning("請先在左側欄位輸入 Gemini API Key！")
+      try:
+        api_key = st.secrets.get("GEMINI_API_KEY")
+      except Exception:
+        api_key = None
+
+    if not api_key:
+      st.error("❌ 找不到 API Key！請在左側欄位貼上你的 Gemini API Key。")
     else:
       with st.spinner(f"正在分析 {target_stock}..."):
-        hist = yf.Ticker(target_stock).history(period="1mo")
-        client = genai.Client(api_key=api_key)
+        try:
+          hist = yf.Ticker(target_stock).history(period="1mo")
 
-        prompt = f"""
-                你是一位資深的台股籌碼與技術分析師。
-                請根據以下 {target_stock} 最近 1 個月的數據：
-                {hist.tail(10).to_string()}
-                
-                請提供 300 字內的即時分析重點：
-                1. 當前 K 線型態與均線趨勢（多/空/盤整）
-                2. 近期成交量變化的意義
-                3. 操作風險提示與關鍵支撐/壓力位
-                """
+          # 初始化 Gemini Client
+          client = genai.Client(api_key=api_key)
 
-        response = client.models.generate_content(
-            model="gemini-3.8-flash", contents=prompt
-        )
-        st.markdown(response.text)
+          prompt = f"""
+                    你是一位資深的台股籌碼與技術分析師。
+                    請根據以下 {target_stock} 最近 1 個月的數據：
+                    {hist.tail(10).to_string()}
+                    
+                    請提供 300 字內的即時分析重點：
+                    1. 當前 K 線型態與均線趨勢（多/空/盤整）
+                    2. 近期成交量變化的意義
+                    3. 操作風險提示與關鍵支撐/壓力位
+                    """
+
+          # 使用當前最新標準模型
+          response = client.models.generate_content(
+              model="gemini-3.8-flash", contents=prompt
+          )
+
+          st.success("✅ 分析報告產生成功！")
+          st.markdown(response.text)
+
+        except Exception as err:
+          st.error(f"⚠️ 產出報告時發生錯誤：{err}")
+          st.info(
+              "小提示：請確認左側輸入的 API Key 是否複製完整（通常為 AIzaSy..."
+              " 開頭）。"
+          )
