@@ -85,7 +85,7 @@ if selected_stocks:
   target_stock = st.selectbox("選擇股票進行 AI 診斷:", selected_stocks)
 
   if st.button("🚀 產生 AI 分析報告"):
-    # 優先讀取輸入框，若無則讀取 Secrets
+    # 讀取金鑰
     api_key = user_api_key.strip() if user_api_key else None
     if not api_key:
       try:
@@ -100,7 +100,7 @@ if selected_stocks:
         try:
           hist = yf.Ticker(target_stock).history(period="1mo")
 
-          # 初始化 Gemini Client
+          # 使用全新 google-genai SDK 認證 (相容 AQ. 與 AIzaSy. 格式)
           client = genai.Client(api_key=api_key)
 
           prompt = f"""
@@ -114,17 +114,13 @@ if selected_stocks:
                     3. 操作風險提示與關鍵支撐/壓力位
                     """
 
-          # 使用當前最新標準模型
+          # 呼叫相容模型
           response = client.models.generate_content(
-              model="gemini-3.8-flash", contents=prompt
+              model="gemini-2.5-flash", contents=prompt
           )
 
           st.success("✅ 分析報告產生成功！")
           st.markdown(response.text)
 
         except Exception as err:
-          st.error(f"⚠️ 產出報告時發生錯誤：{err}")
-          st.info(
-              "小提示：請確認左側輸入的 API Key 是否複製完整（通常為 AIzaSy..."
-              " 開頭）。"
-          )
+          st.error(f"⚠️️ 產出報告時發生錯誤：{err}")
