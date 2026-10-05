@@ -1,4 +1,3 @@
-Plaintext
 streamlit
 streamlit-autorefresh
 yfinance
