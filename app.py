@@ -1,8 +1,10 @@
 import os
+import time
 import pandas as pd
 import streamlit as st
 import yfinance as yf
 from google import genai
+from google.genai.errors import APIError
 from streamlit_autorefresh import st_autorefresh
 
 # 頁面基本設定
@@ -85,7 +87,7 @@ if selected_stocks:
   target_stock = st.selectbox("選擇股票進行 AI 診斷:", selected_stocks)
 
   if st.button("🚀 產生 AI 分析報告"):
-    # 讀取金鑰
+    # 讀取 API Key
     api_key = user_api_key.strip() if user_api_key else None
     if not api_key:
       try:
@@ -96,11 +98,9 @@ if selected_stocks:
     if not api_key:
       st.error("❌ 找不到 API Key！請在左側欄位貼上你的 Gemini API Key。")
     else:
-      with st.spinner(f"正在分析 {target_stock}..."):
+      with st.spinner(f"正在分析 {target_stock} (若伺服器繁忙會自動重試)..."):
         try:
           hist = yf.Ticker(target_stock).history(period="1mo")
-
-          # 使用全新 google-genai SDK 認證 (相容 AQ. 與 AIzaSy. 格式)
           client = genai.Client(api_key=api_key)
 
           prompt = f"""
@@ -114,13 +114,44 @@ if selected_stocks:
                     3. 操作風險提示與關鍵支撐/壓力位
                     """
 
-          # 呼叫相容模型
-          response = client.models.generate_content(
-              model="gemini-3.8-flash", contents=prompt
-          )
+          # 優先使用 3.8 模型，並設定備用模型清單
+          models_to_try = [
+              "gemini-3.8-flash",
+              "gemini-3.1-flash",
+              "gemini-2.5-flash",
+          ]
+          response_text = None
+          last_error = None
 
-          st.success("✅ 分析報告產生成功！")
-          st.markdown(response.text)
+          for model_name in models_to_try:
+            # 針對 503 等暫時性錯誤，最多重試 3 次
+            for attempt in range(3):
+              try:
+                res = client.models.generate_content(
+                    model=model_name, contents=prompt
+                )
+                response_text = res.text
+                break
+              except APIError as e:
+                last_error = e
+                # 若遇到 503 (UNAVAILABLE) 則等待 2 秒再重試
+                if "503" in str(e) or "UNAVAILABLE" in str(e):
+                  time.sleep(2)
+                  continue
+                else:
+                  # 若遇到其他錯誤（如 404）則切換下一個模型嘗試
+                  break
+
+            if response_text:
+              break
+
+          if response_text:
+            st.success("✅ 分析報告產生成功！")
+            st.markdown(response_text)
+          else:
+            st.error(
+                f"⚠️ 產出報告失敗：伺服器目前繁忙或模型暫時無法回應 ({last_error})"
+            )
 
         except Exception as err:
-          st.error(f"⚠️️ 產出報告時發生錯誤：{err}")
+          st.error(f"⚠️ 執行時發生未知錯誤：{err}")
